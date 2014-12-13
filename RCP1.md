@@ -6,7 +6,7 @@ Author: Salvatore Sanfilippo <antirez@gmail.com>
 Creation date: 12 Dec 2014
 Update date: 13 Dec 2014
 Status: open
-Version: 1.0
+Version: 1.1
 ```
 
 History
