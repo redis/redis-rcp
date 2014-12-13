@@ -6,12 +6,19 @@ Author: Salvatore Sanfilippo <antirez@gmail.com>
 Creation date: 12 Dec 2014
 Update date: 13 Dec 2014
 Status: open
+Version: 1.0
 ```
+
+History
+---
+
+* Version 1.0: Initial version.
+* Version 1.1: Slow commands ACL flag added.
 
 Rationale
 ---
 
- Even if it's lovely to think at Redis as a do-one-thing
+Even if it's lovely to think at Redis as a do-one-thing
 daemon, in complex production environments you end needing basic ACLs,
 credentials rotations, and so forth.
 
@@ -45,17 +52,17 @@ specifies the path of a file that lists users, passwords, ACLs.
 
 Example:
 
-users-file /var/redis/users.txt
+    users-file /var/redis/users.txt
 
 The users file has the following syntax:
 
-<username> <password> <acls>
+    <username> <password> <acls>
 
 As with redis.conf, it is possible to use quotes for strings
 containing spaces. Example:
 
-antirez "my password" xrwa
-default "" x
+    antirez "my password" xrwa
+    default "" x
 
 ACLs
 ---
@@ -63,15 +70,18 @@ ACLs
 ACLs are specified as the third argument in the password. Each
 character enables a class of commands.
 
-x: AUTH command.
-r: Read only commands.
-w: Write commands.
-d: Dangerous write commands (FLUSHALL, FLUSHDB)
-a: Admin commands (CONFIG, MONITOR, SLAVEOF, MIGRATE, RESTORE, ...)
+    x: AUTH command.
+    r: Read only commands.
+    w: Write commands.
+    s: Slow commands (Not constant time or logarithmic complexity)
+    d: Dangerous write commands (FLUSHALL, FLUSHDB)
+    a: Admin commands (CONFIG, MONITOR, SLAVEOF, MIGRATE, RESTORE, ...)
 
 If no users file is provided, or no "default" user is found inside,
 new connections have the maximum level of access, like it happens
 today.
+
+Note that the `s` flag is only processed after the `r` and `w` flags are processed, so for example if the ACL is just `r`, slow read-only commands with an O(N) time complexity will still be denied.
 
 Reloading users
 ---
