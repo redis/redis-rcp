@@ -14,6 +14,14 @@ This is the process:
 
 Note: we suggest to don't provide a reference implementation if it's a lot of work to write one, unless you already have one.
 
+RCPs possible statuses are:
+
+* Open: discussion in progress.
+* Refused: the change was not accepted.
+* Accepted: the change was accepted.
+* Implemented: the change was accepted and an implementation merged into the `unstable`.
+* Production: the change was merged into a stable version of Redis.
+
 List of RCPs
 ===
 
