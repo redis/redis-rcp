@@ -6,7 +6,8 @@ Author: Salvatore Sanfilippo <antirez@gmail.com>
 Creation date: 2014-12-12
 Update date: 2014-16-12
 Status: open
-Version: 1.2
+Version: 1.3
+Implementation: none
 ```
 
 History
@@ -15,6 +16,7 @@ History
 * Version 1.0 (2014-12-12): Initial version.
 * Version 1.1 (2014-13-12): Slow commands ACL flag added.
 * Version 1.2 (2014-16-12): Fine grained command ACLs.
+* Version 1.3 (2014-16-12): Additional changes section added.
 
 Rationale
 ---
@@ -159,6 +161,14 @@ they should be updated in place. Moreover this means that the semantics of
 a given connection may change at runtime, that may not be great for rotation
 of clients privileges: old clients should experiment the same behavior as
 usually until reconnection.
+
+Additional changes needed
+---
+
+1. Redis slaves should be able to authenticate with the new system.
+2. Redis Sentinel should also have configuration directives to handle it.
+3. Eventually deprecate the single argument `AUTH` form (write an RCP for it).
+4. Write documentation for the new authentication system.
 
 Security and hashed passwords
 ---
