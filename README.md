@@ -5,7 +5,7 @@ In order to get a big change to Redis discussed, and potentially implemented
 and accepted into the core, the new process (starting from December 2014)
 is to write a Redis Change Proposal (RCP).
 
-1. Write an RCP following the same schema used in the existing RCPs.
+1. Write an RCP following the same schema used in the existing RCPs. When you are ready to publish your RCP, please obtain your RCP number by opening an issue in the redis/redis-rcp repository asking for a new number. The first to ask for a given number wins automatically, no need to get an acknowledge, we'll close those issues only when we'll update the list of RCPs with your number marked as *work in progress* in this README file.
 2. Post a pull request here to get your RCP added.
 3. Post a link to your RCP with a clear subject in the [redis-dev mailing list](https://groups.google.com/forum/#!forum/redis-dev). 
 4. Wait for the RCP to get discussed, and eventually denied or accepted.
