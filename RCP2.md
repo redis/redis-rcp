@@ -73,10 +73,9 @@ the new event added.
 Configuration directive
 ---
 
-A single configuration directive is added, called users-file. It controls how
-many events to store: `memlog-max-len <maximum> `. The default is 128, the
-minimum is 0 which disabled it. Access to the directive via `CONFIG` is
-permitted.
+A single configuration directive is added It controls how many events to store:
+`memlog-max-len <maximum> `. The default is 128, the minimum is 0 which
+disabled it. Access to the directive via `CONFIG` is permitted.
 
 
 INFO Section Addition
