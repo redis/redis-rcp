@@ -57,12 +57,12 @@ Subcommands:
 `MEMLOG HISTORY [count]`: Returns the last [count] memory events
 
 Example output:
-	```
+```
 		1) 1) (integer) 1405067822
 		   2) (integer) 12345678
 		2) 1) (integer) 1405067941
 		   2) (integer) 12345675
-	```
+```
 
 `MEMLOG LEN`: Returns the current length of the MEMLOG log.
 
