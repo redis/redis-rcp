@@ -24,3 +24,4 @@ List of RCPs
 ===
 
 1. RCP1: [Multi user AUTH with ACLs.](https://github.com/redis/redis-rcp/blob/master/RCP1.md)
+1. RCP3: [Lazy write operations](https://github.com/redis/redis-rcp/blob/master/RCP3.md)
