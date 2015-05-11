@@ -36,6 +36,6 @@ Commands introduced
 ---
 
 New Sentinel Subcommand: 
-`SENTINEL FLUSHCONFIG`: Triggers a sentinel flush of the config to disk. Returns and OK response.
+`SENTINEL FLUSHCONFIG`: Triggers a sentinel flush of the config to disk. Returns an "OK" response.
 
 
