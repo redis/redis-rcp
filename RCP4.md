@@ -5,7 +5,7 @@ RCP 4 - Add "flushconfig" sub-command to Sentinel command
 Author: Bill Anderson <therealbill@me.com>
 Creation date: 11/15/05  
 Update date: 2015-15-05 
-Status: open
+Status: production
 Version: 1.0
 Implementation: https://github.com/therealbill/redis/tree/sentinel-flushconfig-command
 ```
