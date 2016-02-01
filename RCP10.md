@@ -19,7 +19,7 @@ History
 Proposal 
 ---
 Add two new options to the config command. The first is to enable the user to
-pull the defualt values for all of the configuration directives. The second is
+pull the default values for all of the configuration directives. The second is
 for pulling all directive/value pairs which are *not* the default.
 
 
