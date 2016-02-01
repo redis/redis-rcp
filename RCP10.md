@@ -40,7 +40,7 @@ can be very useful for tracking default changes and values across versions.
 This can be useful for users looking to upgrade their Redis version to detect
 changes which may affect their setup. This command returns what the compiled in
 defaults are - not what the current values are. Combining this with the `config
-diff` command woudl allow administration tools to "reset" a value to the
+diff` command would allow administration tools to "reset" a value to the
 default for that version of Redis, for example.
 
 
