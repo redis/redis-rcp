@@ -3,15 +3,22 @@ RCP 11 - The stream data type
 
     Author: Salvatore Sanfilippo <antirez@gmail.com>
     Creation date: 2016-06-04
-    Update date: 2016-06-04
+    Update date: 2016-06-22
     Status: open
-    Version: 1.0
+    Version: 1.1
     Implementation: none
+
+TODO
+---
+
+* Log compaction.
+* Time vs number of messages eviction policies.
 
 History
 ---
 
 * Version 1.0 (2016-06-04): Initial version.
+* Version 1.1 (2016-06-22): Message format change and messages acknowledges.
 
 Rationale
 ---
@@ -64,6 +71,25 @@ very strong data retention abilities, we could probably try to do more in order
 to maximize what it is possible to do with such a data structure in a system
 like Redis.
 
+Key value message format
+---
+
+One of the ideas used by Apache Kafka is that messages are in the key-value
+format. This idea looks trivial, since in a free-form message you can encode
+whatever information you want, technically speaking, for example by using
+a JSON payload. However this format is very convenient for a couple of reasons:
+
+1. Most events can be categorized by key, so to have a built-in key-value format means that there is no need to include the key in the message serialization format.
+2. The key-value format is directly accessible by the server that provides the messaging primitives. This means that it can provide features that exploit the semantics of the format. For example Kafka *log compaction* is a good example. Log compaction allows to expire messages not by age, but just retaining for each key the last message seen.
+
+Currently in this specification no log compaction feature is described, and is
+possible that the feature will not be implemented or will be implemented only
+later. However to use a key-value message format looks interesting for the
+future.
+
+However because in Redis there are already keys, Redis streams will name
+the *message key* in a stream the message **message tag**.
+
 Logical offsets
 ---
 
@@ -82,8 +108,10 @@ of memory efficiency.
 Commands introduced
 ---
 
-    TWRITE key entry
-    TWRITE key [BACKLOG <count>] ENTRIES entry [entry entry ... entry]
+**TWRITE command**
+
+    TWRITE key tag entry
+    TWRITE key [BACKLOG <count>] ENTRIES tag entry [tag entry ... tag entry]
 
 This command creates a new stream at `key` if it does not already exist, and
 adds the specified `entry` at the end of the log. It returns the offset
@@ -102,24 +130,30 @@ specified items in the log, since it is likely that an implementation strategy
 for the streams data structure is to have blocks of messages, so we may
 evict just on a per-block basis.
 
-    TREAD key <offset> <count> [BLOCK <milliseconds>] [GROUP <keyname>] [WITHINFO]
+**TREAD command**
+
+    TREAD key <offset> <count> [BLOCK <milliseconds>] [GROUP <keyname>] [RETRY <rerty-ms> <expire-ms>] [WITHINFO]
 
 Read *count* messages starting from *offset*. The command returns an array
-of messages:
+of messages, where each message contains the offset, tag and message itself.
 
-    ["foo", "bar", ...]
+    [[1234,"tag1","msg1"],[1235,"tag2","msg2"],...]
 
-Since the user knows what offset it demanded usually this is enough, however
-if the `WITHINFO` option is passed, the first element is an array that
-specifies the first offset available in the stream, the last offset, the
-offset of the first message in the reply, and the number of replies.
+The following are the options the `TWRITE` command supports:
 
-By using a `count` of 0 it is possible to obtain just the informations, in order
+    WITHINFO
+
+If the `WITHINFO` option is passed, the first element of the reply is an array
+that specifies the first and last offset available in the stream.
+
+By using a `COUNT` of 0 it is possible to obtain just the informations, in order
 to start reading only the new data in the next call, or to fetch the available
 history, and so forth.
 
 When the user requests an offset which is already evicted, the missing
 messages are reported as NULL entries.
+
+    BLOCK <milliseconds>
 
 The `BLOCK <ms>` option blocks if there are no messages having an offset
 greater or equal the specified offset, and unblocks the client returning
@@ -130,18 +164,37 @@ Given that offsets are planned to be logical, a client may decide, based
 on what it is receiving, to ignore the next N messages, and block for
 an offset of `old_offset + N`.
 
+    GROUP <groupname>
+
 The `GROUP` option implements consumer groups, in a similar fashion as Kafka.
-When a group is specified, which is actually just a Redis key name, the
-specified offset is disregarded. Instead in order to provide messages to the
-client the offset to use is read from the group key name. The group key
+When a group is specified, the specified offset is disregarded.
+Instead in order to provide messages to the client the offset to use is read
+from the group meta data stored inside the stream structure. The group
 is updated to the new offset at the same time, so that the next client asking
 for messages with the same group will receive new messages and so forth.
+
+The basic idea of groups is to return a different subset of a stream of messages
+to different clients participating to the same group.
 
 Note that `GROUP` option must play well with `BLOCK`: when multiple clients
 are blocked with the same group we must guarantee that the one that we
 serve first will return as the last one in the queue of clients blocked, so that
 we can efficiently route the messages evenly to all the clients that are
 participating to the group.
+
+    RETRY <retry-ms> <expire-ms>
+
+If a retry time is specified, and only if also a group name is specified,
+the returned messages need to be acknowledged, otherwise they'll be
+provided to clients of the specified group after the amounts of milliseconds
+specified (or more). Clients must acknowledge messages using the `TACK`
+command documented later.
+
+The expire time provided gives a time to live for messages that are not
+acknowledged in time. After the expire time elapses, the message is no
+longer retained in the list of pending messages and gets destroyed instead.
+
+**TEVICT command**
 
     TEVICT key <offset>
 
@@ -152,6 +205,95 @@ in the currently active block, depending on implementation details.
 
 If a negative number is specified, it means to retain at least the specified
 number of messages.
+
+**TACK command**
+
+    TACK key groupname offset ... offset
+    TACK key groupname start_offset-end_offset
+
+How messages pending for acknowledged are handled
+---
+
+Conceptually the stream is just a sequence of messages. However in order
+to implement acknowledges this is not enough: we need to retry the same
+messages if they don't get acknowledged, and we also need to be able to
+mark messages as acknowledged.
+
+Technically speaking a very basic acknowledgement system may be based
+on a single additional offset stored for each stream group of clients, so
+that other than having the offset of the last message provided to clients so
+far, we also remember the offset of the last message acknowledged so that
+all the messages with an offset smaller than that are guaranteed to
+be acknowledged.
+
+However in practice clients acknowledge messages out of order. We also
+need to know when each message pending for an acknowledge can be rescheduled
+because its retry time elapsed.
+
+This problem is not exactly rocket science, for example a tree of "ranges"
+of messages provided, alongside with a bitmap for each range in order to
+set bits corresponding to acknowledged messages, is a pretty obvious solution.
+Moreover we could take an alternative view in order to efficiently navigate
+the pending messages by retry time to know when it's time to deliver
+them again.
+
+However given that streams are currently an initial project, to invest time
+and add complexity into the Redis server for such a feature makes me a bit
+nervous, so I tried to find an alternative solution that is good enough
+to start.
+
+The alternative idea I'm proposing is to have just a limited list of
+pending messages, so each client group has a structure like the following:
+
+    struct client_group {
+        uint64_t last_offset;   /* Last offset provided. */
+        uint64_t ack_offset;    /* Last acknowledged offset so that
+                                   everything < ack_offset is guaranteed
+                                   to be acked. */
+        struct pending_messages *pending;
+        uint64_t pending_count; /* Number of pending messages. */
+
+        ... other stuff ...
+    }
+
+The pending messages is a linked list where we have:
+
+    struct pending_messages {
+        mstime_t retry_time;    /* When we'll deliver it again. */
+        mstime_t expire_time;   /* Delete this entry if this time is reached. */
+        uint64_t offset;        /* The offset to deliver. */
+        struct pending_messages *next;
+    }
+
+For each unacknowledged message we have an entry like that. Those entries
+are created only when TREAD is called with both `GROUP` and `RETRY` options.
+
+As we receive `TACK` commands, we scan the pending messages in order to remove
+entries: as we remove entries that are acknowledged, we need to update the
+client group `ack_offset`.
+
+When `TREAD` is called, we scan the pending messages to try to deliver things
+that are already ready to be retried. However while it is possible that
+something in the middle is already to be retried while the first entry is not,
+we stop scanning entries in pending messages as soon as we find the first entry
+that is not to be retried. Basically we only guarantee that the message will
+be rescheduled after the retry time, but don't guarantee that this time is
+bound if there are other pending messages with different retry times.
+
+As we re-deliver things with `TREAD`, we also update the `retry_time` of the
+entry.
+
+However we don't want the pending messages list to get long: certain operations
+are O(N) in the worst case in this list. Moreover we don't want to use an
+unbound amount of memory for the pending list.
+
+So what we do is that, after the pending messages reach a maximum size which
+is user-configurable, TREAD no longer provides **new messages** to clients in a
+group, so that we wait for the messages in our pending list to be retried again.
+
+Note that `TREAD` may also block while there are actually new messages, and it
+will only unblock when on either `TWRITE` or as a result of TACK, the list of
+pending messages is found again to be within the limits.
 
 Behavior of clients groups with empty keys
 ---
