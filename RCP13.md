@@ -95,10 +95,73 @@ key. The value is a structure that has many fields:
 3. The client that is currently using the key for writing.
 4. The queue of clients that are blocked because the key is currently locked.
 
+So inside every Redis database, the redisDB structure we'll have:
+
+    dict *locked_keys;
+    dict *locked_keys_fork_queue;
+    uint64_t locked_keys_read;  /* How many read locks are in effect? */
+    uint64_t locked_keys_write; /* How many write locks are in effect? */
+    pthread_mutex_t locked_keys_mutes; /* Protect the above data structures. */
+
+The second dictionary is used when we want to persist, read later.
+The first dictionary is the one described above, so its values will be
+structures like the following:
+
+    struct lockedKey {
+        int lock_type;  /* LOCKED_KEY_READ,
+                           LOCKED_KEY_WRITE,
+                           LOCKED_KEY_PENDING_FORK */
+        list *reading_clients; /* List of clients that locked for read. */
+        client *writing_client; /* The client that locked for write. */
+        list *queue;            /* Clients blocked since key is locked. */
+    };
+
 Please note that we don't have a queue of the clients that are blocked on the
-key because of the module API (or core API at some point) that tried to lock
+key because the module API (or core API at some point) tried to lock
 the key without success, because the API to lock the key is synchronous.
 Why this is sufficient is explained later in the API section.
+
+## State required in the client structure
+
+At the same time we also need to remember, in the client structure, the keys
+we locked or that we are waiting for is blocked. Potentially we may reuse
+some other data structure that the client structure already has for similar
+tasks due to other kinds of blocking operations.
+
+## Calling fork() to persist
+
+If there are just client locks currently active, we are free to fork()
+because the dataset at the moment of the fork is consistent: there are no
+modifications going on in the locked keys, nor there are in the rest of the
+data set, since we only perform syncrhonous operations otherwise.
+
+However if we have keys that are in the process of being modified in the
+background we are no longer able to fork: the saving child will access keys
+locked for writing that may be in some inconsistent state.
+
+So when we need to actually fork and persist on the disk because of AOF
+rewriting or RDB snapshotting, no new write locks should be allowed, and
+at the same time, we should wait for the count of write locks to drop to
+zero: when this happens we can finally fork. To do so we raise a flag
+in the global server structure;
+
+    int write_locks_denied; /* Name may vary */
+
+So that if `server.write_locks_denied` is true we can do the following with
+clients trying to lock keys for writing: we put them into the queue, like
+we do if there is already a client with a read or write lock. However
+additionally we put the key into the dictionary declared above:
+
+    dict *locked_keys_fork_queue;
+
+This way once we fork and clear the flag `server.write_locks_denied`, we
+can run the list and keys that may have clients pending to be blocked.
+
+In this case the key in the locked dictionary will have the type
+`LOCKED_KEY_PENDING_FORK`, since it's not locked for reading nor for
+clients, yet the entry exists in the locked dictionary.
+
+## What happens to the key when it's locked for writing
 
 ## Modules API
 
