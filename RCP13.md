@@ -161,12 +161,65 @@ In this case the key in the locked dictionary will have the type
 `LOCKED_KEY_PENDING_FORK`, since it's not locked for reading nor for
 clients, yet the entry exists in the locked dictionary.
 
+## Client structure interaction
+
+When we execute commands with multiple keys, that may be locked at the same
+time, such as `MGET A B`, we may end in the situation where the client
+is blocked waiting for multiple keys to be unlocked in order to continue the
+execution of the command. Since in the client structure we have the list of
+keys we are waiting for, we can understand when all the keys are ready since
+once the last was unlocked, our list length will drop to zero: now it's time
+to execute the command.
+
+When the client is freed while blocked waiting for locked clients, we run the
+list of keys the client is blocked for, and can perform the cleanup in the
+locked keys queue as well.
+
+However there is a more complex case: the client may invoke a command that
+blocks after locking some key, executing some operation in a different thread
+while the key is locked. In the meantime the client may get freed for some
+reason due to network errors or the execution of the `CLIENT KILL` command
+or other similar reasons. When this happens, the blocked client structure that
+was generated when the command implementation called `RedisModule_BlockClient()`
+is modified in order to continue the execution in a different thread (or
+later when a callback is called and so forth), is modified in order to set its
+client reference to NULL.
+
+However when the blocked client handle is finally unblocked (even if the real
+client it belongs no longer exists), we should be able to do the cleanup
+correctly: calls to unlock the keys should work as expected, even if now the
+original client locking the keys no longer exist. We could do one of the following
+things to solve this problem:
+
+1. At least initially allow to lock the keys only in the context of a blocked client handle. This one must exist for all the time the asynchronous request is completed.
+2. Alternatively, when the client is freed, we could replace its references in the locked keys data structures with the one of the fake client that we use in order to accumulate the replies in the blocked client handle:
+
+    typedef struct RedisModuleBlockedClient {
+	... more fields ...
+	client *reply_client;           /* Fake client used to accumulate replies
+					   in thread safe contexts. */
+	... more fields ...
+    } RedisModuleBlockedClient;
+
+Similarly we could link the lists that we have in the original client about what
+keys we are locking there in the `reply_client` field. At the end, when we
+detect that the client field is NULL, we know that we should use the `reply_client`
+to do the cleanup instead.
+
 ## What happens to the key when it's locked for writing
+
+When the key is locked for writing, and hence should never be touched by the
+main thread in any way, it is probably a good idea to *force* the fact that the
+key is not accesible. This could be done efficiently by setting the pointer
+to the object that is stored in the key to a special pointer like 0xFF112233 or
+any other pointer that maps to an address likely unmapped in the process address
+space, and that will immediately be noticed on crashes.
+
+Moreover lookup functions should explicitly have asserts to check if they are
+returning such pointer, and abort the Redis process in such case.
 
 ## Modules API
 
 ## Optimizations and defensive strategies
 
-1. Copy instead of write lock when object is small.
-2. Use a dummy object instead of NULL.
-3. Having a key flag in the new key objects in order to know if the key is locked without having to do an extra lookup, so that we can assert in LookupKey() API.
+TODO: Copy the object on write lock when the object is small?
