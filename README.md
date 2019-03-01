@@ -25,3 +25,5 @@ List of RCPs
 
 1. RCP1: [Multi user AUTH with ACLs.](https://github.com/redis/redis-rcp/blob/master/RCP1.md)
 1. RCP3: [Lazy write operations](https://github.com/redis/redis-rcp/blob/master/RCP3.md)
+1. RCP4: [Sentinel Flushconfig command](https://github.com/redis/redis-rcp/blob/master/RCP4.md)
+1. RCP10: [Additional CONFIG Subcommands](https://github.com/redis/redis-rcp/blob/master/RCP10.md)
